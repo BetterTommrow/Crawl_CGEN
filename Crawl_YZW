@@ -1,0 +1,291 @@
+import requests
+import bs4
+from bs4 import BeautifulSoup
+from scrapy import Selector
+import time
+import pandas as pd
+from tkinter import Tk, Label, Entry, Listbox, Button, END
+import joblib
+import numpy as np
+import difflib
+import re
+
+# 求解字符串相似程度
+def string_similar(s1, s2):
+    return difflib.SequenceMatcher(None, s1, s2).quick_ratio()
+
+class Claw_YZW:
+    def __init__(self, sub_cate, sub_cate_code):
+        self.sub_cate = sub_cate
+        self.sub_cate_code = sub_cate_code
+        self.chrome_info = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:71.0) Gecko/20100101 Firefox/71.0'
+        }
+        self.code_university = [
+            [11, "北京市"],
+            [12, "天津市"],
+            [13, "河北省"],
+            [14, "山西省"],
+            [15, "内蒙古自治区"],
+            [21, "辽宁省"],
+            [22, "吉林省"],
+            [23, "黑龙江省"],
+            [31, "上海市"],
+            [32, "江苏省"],
+            [33, "浙江省"],
+            [34, "安徽省"],
+            [35, "福建省"],
+            [36, "江西省"],
+            [37, "山东省"],
+            [41, "河南省"],
+            [42, "湖北省"],
+            [43, "湖南省"],
+            [44, "广东省"],
+            [45, "广西壮族自治区"],
+            [46, "海南省"],
+            [50, "重庆市"],
+            [51, "四川省"],
+            [52, "贵州省"],
+            [53, "云南省"],
+            [54, "西藏自治区"],
+            [61, "陕西省"],
+            [62, "甘肃省"],
+            [63, "青海省"],
+            [64, "宁夏回族自治区"],
+            [65, "新疆维吾尔族自治区"]
+        ]
+        self.universities = [u[1] for u in self.code_university]
+        self.form_data = {
+            'ssdm': '', 'dwmc': '', 'mldm': 'zyxw', 'mlmc': '', 'yjxkdm': self.sub_cate_code, 'zymc': self.sub_cate, 'xxfs': ''
+        }
+        self.Sub_data = []
+        self.Test_sub = []
+        self.province = []
+        self.Counts = []
+
+
+    # 爬取对应专业高校链接
+    def get_Us_data(self, i):
+        link = []
+        code = self.code_university[i][0]
+        self.form_data['ssdm'] = code
+        try:
+            #post
+            html_data = requests.post(
+                'https://yz.chsi.com.cn/zsml/queryAction.do', headers=self.chrome_info, data=self.form_data
+            )
+            text.insert(END, f"正在爬取{self.code_university[i][1]}所有研究生院校链接")
+            text.see(END)
+            text.update()
+            # print("正在爬取%s所有研究生院校链接" % self.code_university[i][1])
+        except:
+            text.insert(END, "请求高校数据出错")
+            text.see(END)
+            text.update()
+            # print("请求高校数据出错")
+        #提取该省所有高校链接地址
+        count = 0
+
+        soup = BeautifulSoup(html_data.text, 'html.parser')
+        for tr in soup.find('tbody').children:
+            if isinstance(tr, bs4.element.Tag):#判断是否为tr标签
+                tds = tr('td')
+                a = tds[0].form.a#定位到form标签下的a链接标签
+                #print(a.text)
+                link.append([a.get('href'), a.text])#该省院校的相对链接
+                count += 1
+        text.insert(END, f"总共有{count}家院校专业")
+        text.see(END)
+        text.update()
+        # print(count)
+        return link
+
+    def get_thisUniversity_data(self, link):
+        # post表单信息
+        base_url = 'https://yz.chsi.com.cn'
+        j = 0
+        data = []  # 存储爬取的数据
+        link_test_order = []
+        #print("分割大学名称、序号中")
+        for i in range(len(link)):
+            try:
+                lin = link[i][1].split(')')
+                form_data1 = {
+                    'ssdm': self.form_data['ssdm'], 'dwmc': lin[1], 'mldm': self.form_data['mldm'],
+                    'mlmc': self.form_data['mlmc'], 'yjxkdm': self.form_data['yjxkdm'], 'xxfs': self.form_data['xxfs'],
+                    'zymc': self.form_data['zymc']
+                }
+                Url = base_url + link[i][0]
+                html = requests.post(Url, headers = self.chrome_info, data = form_data1)
+                html = BeautifulSoup(html.text, 'html.parser')
+                for tr in html.find('tbody').children:
+                    if isinstance(tr, bs4.element.Tag):
+                        tds = tr('td')
+                        data.append(['学校', link[i][1]])
+                        data.append(['考试方式', tds[0].text])
+                        data.append(['院系', tds[1].text])
+                        data.append(['专业', tds[2].text])
+                        data.append(['研究方向', tds[3].text])
+                        data.append(['学习方式', tds[4].text])
+                        data.append(['拟招生人数', re.compile("'(.*)'").findall(str(tds[6]))[0]])
+                        link_test_order.append([lin[1] + tds[1].text + tds[2].text, tds[7].a.get('href')])
+                j += 1
+                text.insert(END, f"爬取{i + 1}所院校成功")
+                text.see(END)
+                text.update()
+                # print("爬取%d所院校成功" % (i + 1))
+            except:
+                text.insert(END, f"爬取{link[i][1]}数据失败")
+                text.see(END)
+                text.update()
+                # print("爬取%s数据失败" % link[i][1])
+        text.insert(END, f"该省共{len(link_test_order)}个相关专业")
+        text.see(END)
+        text.update()
+        # print("该省共%d个相关专业" % len(link_test_order))
+        return link_test_order, data
+
+    #请求各院校各专业的考试信息数据
+    def get_test_order(self, link_test_order):
+        mycol = []  # 存取考试信息
+        test_subject_data = []
+        base_url = 'https://yz.chsi.com.cn'
+        for i in range(len(link_test_order)):
+            Url = base_url + link_test_order[i][1]
+            html = requests.get(Url, headers = self.chrome_info)
+            html_text = BeautifulSoup(html.text, 'html.parser')
+            for tr in html_text.find_all('tbody', class_ = "zsml-res-items"):
+                #tr=tr.children
+                if isinstance(tr, bs4.element.Tag):
+                    tds = tr('td')
+                    # print("类型", type(tds[0]))
+                    tds[0] = str(tds[0]).replace("\r\n", "")
+                    # print("s类型", type(tds[0]))
+                    tds[0] = tds[0].replace(" ", "")
+                    tds[1] = str(tds[1]).replace("\r\n", "")
+                    tds[1] = tds[1].replace(" ", "")
+                    tds[2] = str(tds[2]).replace("\r\n", "")
+                    tds[2] = tds[2].replace(" ", "")
+                    tds[3] = str(tds[3]).replace("\r\n", "")
+                    tds[3] = tds[3].replace(" ", "")
+                    con1 = Selector(text = tds[0])
+                    con2 = Selector(text = tds[1])
+                    con3 = Selector(text = tds[2])
+                    con4 = Selector(text = tds[3])
+                    #print(con1)
+                    test_subject_data.append([con1.xpath("//td/text()").extract(), con2.xpath("//td/text()").extract(), con3.xpath("//td/text()").extract(), con4.xpath("//td/text()").extract()])
+            # mydict={"univers": link_test_order[i][0], "course1": test_subject_data[i][0], "course2": test_subject_data[i][1], "course3": test_subject_data[i][2], "course4": test_subject_data[i][3]}
+            mycol.append(test_subject_data[i][0])
+            mycol.append(test_subject_data[i][1])
+            mycol.append(test_subject_data[i][2])
+            mycol.append(test_subject_data[i][3])
+            #print("test",test_subject_data)
+            text.insert(END, f"正在爬取{link_test_order[i][0]}考试科目")
+            text.see(END)
+            text.update()
+            # print("正在爬取%s考试科目" % (link_test_order[i][0]))
+        return mycol
+
+    # 最终数据合并
+    def Merge(self):
+        school_data = {}
+        # province = '北京市'
+        Columns1 = [
+            '学校', '考试方式', '院系', '专业', '研究方向', '学习方式', '拟招生人数'
+        ]
+        Columns2 = [
+            '政治', '外语', '业务课一', '业务课二'
+        ]
+        for i in range(len(Columns1)):
+            school_data.update({Columns1[i]: [s[1] for s in self.Sub_data[i::len(Columns1)]]})
+        for k in range(len(Columns2)):
+            school_data.update({Columns2[k]: [c[0] for c in self.Test_sub[k::len(Columns2)]]})
+        return school_data
+
+    def main(self):
+        start = time.time()
+        for i in range(len(self.code_university)):  # len(code_university)
+            text.insert(END, '=' * 50)
+            text.see(END)
+            text.update()
+            # print('=' * 50)
+            # 请求该省高校相对链接数据数据
+            try:
+                link = self.get_Us_data(i)
+            except AttributeError:
+                self.universities.remove(self.code_university[i][1])
+                text.insert(END, '发现该省未有该专业的设立')
+                text.see(END)
+                text.update()
+                continue
+            # 请求高校专业、方向数据
+            link_test_order, sub_data = self.get_thisUniversity_data(link)
+            self.Sub_data.extend(sub_data)
+            self.Counts.append(len(link_test_order))
+            # 高校二级信息
+            # school_data = Trans_data(sub_data, code_university[0][1])
+            # 爬取各专业具体考试科目
+            self.Test_sub.extend(self.get_test_order(link_test_order))
+            time.sleep(3)
+        school_data = self.Merge()
+        for i in range(len(self.Counts)):
+            self.province += [self.universities[i] for c in range(self.Counts[i])]
+        school_data.update({'省份': self.province})
+        school_data = pd.DataFrame(school_data)
+
+        school_data.to_excel(f'C:\\Users\\86176\\Desktop\\{self.sub_cate + self.sub_cate_code}.xls')
+        end = time.time()
+
+        text.insert(END, '此次数据表格直接输出至桌面。' + '\n' + f'此次爬取完成，数据也保存成功！总用时{end - start}秒')
+        text.see(END)
+        text.update()
+
+        # print('此次数据表格直接输出至桌面。')
+        # print('此次爬取完成，数据也保存成功！总用时', end - start, '秒')
+
+def run():
+    Catoria = joblib.load("Profess")
+    sub_cate = entry.get().strip()
+    # 相似度求解
+    simlar_profess = np.array([
+        string_similar(sub_cate, s) for s in Catoria
+    ])
+    simlar_index = np.where(simlar_profess == np.max(simlar_profess))
+    Chpre = re.compile(u'[\u4e00-\u9fa5]') # 提取中文字符所需正则表达式
+    j = 1
+    for i in simlar_index[0]:
+        Chinesestr = ''.join(re.findall(Chpre, Catoria[i]))
+        text.insert(END, f"爬取第{j}个{Chinesestr}")
+        text.see(END)
+        text.update()
+        Numstr = re.sub("\D", "", Catoria[i])
+        Cyzw = Claw_YZW(Chinesestr, Numstr)
+        Cyzw.main()
+        j += 1
+        text.insert(END, "*" * 50)
+        text.see(END)
+        text.update()
+
+if __name__ == '__main__':
+    # 创建窗口
+    root = Tk()
+    root.title('爬取研招网')
+    root.geometry('1225x700')
+    # 标签
+    label = Label(root, text='输入专业类别名称：')
+
+    # 定位
+    label.grid(row=0)
+
+    # 输入控件
+    entry = Entry(root, font=('微软雅黑', 18), width=40)
+    entry.grid(row=0, column=1)
+
+    # 列表控件
+    text = Listbox(root, font=('微软雅黑', 14), width=110, height=20)
+    text.grid(row=1, columnspan=2)
+    # 按钮
+    button = Button(root, text='开始爬取', width=20, height=2, command=run)
+    button.grid(row=3, columnspan=2)
+    # 显示窗口
+    root.mainloop()
