@@ -1,0 +1,37 @@
+from selenium import webdriver
+import re
+from bs4 import BeautifulSoup
+
+
+
+def claw_Profess():
+    Url = 'https://yz.chsi.com.cn/zsml/queryAction.do'
+    # 隐藏浏览器窗口
+    option=webdriver.ChromeOptions()
+    option.add_argument('headless') # 设置option
+    driver = webdriver.Chrome(options=option)  # 调用带参数的谷歌浏览器，注意这里的参数用options!!!否则出现红色的字！！！
+    driver.get(Url)
+
+    driver.implicitly_wait(10)
+
+    html = driver.page_source
+
+    driver.close()
+    driver.quit()
+
+    soup = BeautifulSoup(html, 'lxml')
+
+    Catoria = {}
+    i = 2
+    pre = re.compile(u'[\u4e00-\u9fa5]')
+    while True:
+        catoria = str(soup.select(f'#yjxkdm > option:nth-child({i})'))
+        if len(catoria) == 2:
+            break
+        Catoria.update({''.join(re.findall(pre, catoria)): catoria.split("\"")[1]})
+        i += 1
+    return Catoria
+
+if __name__ == '__main__':
+    Catoria = claw_Profess()
+    # joblib.dump(Catoria, "Profess")
