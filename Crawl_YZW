@@ -1,3 +1,7 @@
+'''
+    Climb the professional information major of China graduate enrollment network (with GUI).
+'''
+
 import requests
 import bs4
 from bs4 import BeautifulSoup
